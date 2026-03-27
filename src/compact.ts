@@ -86,13 +86,9 @@ export async function compactMessages(
     return prompt;
   }
 
-  const olderMessages = conversationMessages.slice(
-    0,
-    conversationMessages.length - recentMessageCount
-  );
-  const recentMessages = conversationMessages.slice(
-    conversationMessages.length - recentMessageCount
-  );
+  const excessMessagesCount = conversationMessages.length - recentMessageCount;
+  const olderMessages = conversationMessages.slice(0, excessMessagesCount);
+  const recentMessages = conversationMessages.slice(excessMessagesCount);
 
   // Serialize older messages for the summarization prompt
   const serialized = serializeMessages(olderMessages);

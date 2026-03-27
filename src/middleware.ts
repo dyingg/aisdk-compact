@@ -21,6 +21,13 @@ export function compactMiddleware(
     onCompaction,
   } = options;
 
+  if (!compactionModel) {
+    console.warn(
+      "[aisdk-compact] No compactionModel provided. The base model will be used for compaction. " +
+        "Consider using a cheaper/smaller model (e.g. gpt-4o-mini, claude-haiku) to reduce costs."
+    );
+  }
+
   return {
     specificationVersion: "v3",
 

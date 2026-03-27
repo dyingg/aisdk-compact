@@ -1,0 +1,14 @@
+{
+  "name": "aisdk-compact-examples",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "bun run streaming-server.ts",
+    "raw": "bun run raw-runs.ts"
+  },
+  "dependencies": {
+    "ai": "^6.0.0",
+    "aisdk-compact": "file:..",
+    "hono": "^4.0.0"
+  }
+}
