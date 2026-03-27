@@ -11,34 +11,43 @@ import { defaultCompactionPrompt } from './prompt.js';
 function serializeMessages(messages: LanguageModelV3Message[]): string {
   return messages
     .map((msg) => {
-      const role = msg.role;
-      if (role === 'system') {
-        return `[system]: ${msg.content}`;
+      switch (msg.role) {
+        case 'system':
+          return `[system]: ${msg.content}`;
+        case 'user':
+        case 'assistant': {
+          const text = msg.content
+            .map((part) => {
+              switch (part.type) {
+                case 'text':
+                  return part.text;
+                case 'reasoning':
+                  return `[reasoning]: ${part.text}`;
+                case 'tool-call':
+                  return `[tool-call: ${part.toolName}(${JSON.stringify(part.input)})]`;
+                case 'tool-result':
+                  return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
+                default:
+                  return `[${part.type}]`;
+              }
+            })
+            .join('\n');
+          return `[${msg.role}]: ${text}`;
+        }
+        case 'tool': {
+          const text = msg.content
+            .map((part) => {
+              switch (part.type) {
+                case 'tool-result':
+                  return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
+                default:
+                  return `[${part.type}]`;
+              }
+            })
+            .join('\n');
+          return `[tool]: ${text}`;
+        }
       }
-      if (role === 'user' || role === 'assistant') {
-        const text = msg.content
-          .map((part) => {
-            if (part.type === 'text') return part.text;
-            if (part.type === 'tool-call')
-              return `[tool-call: ${part.toolName}(${JSON.stringify(part.input)})]`;
-            if (part.type === 'tool-result')
-              return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
-            return `[${part.type}]`;
-          })
-          .join('\n');
-        return `[${role}]: ${text}`;
-      }
-      if (role === 'tool') {
-        const text = msg.content
-          .map((part) => {
-            if (part.type === 'tool-result')
-              return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
-            return `[${part.type}]`;
-          })
-          .join('\n');
-        return `[tool]: ${text}`;
-      }
-      return `[${role}]: [content]`;
     })
     .join('\n\n');
 }
