@@ -1,15 +1,15 @@
-import type { LanguageModelV3Middleware } from '@ai-sdk/provider';
-import type { CompactMiddlewareOptions } from './types.js';
-import { estimateTokens as defaultEstimateTokens } from './token-estimator.js';
-import { getModelContextSize } from './model-context.js';
-import { compactMessages } from './compact.js';
+import type { LanguageModelV3Middleware } from "@ai-sdk/provider";
+import type { CompactMiddlewareOptions } from "./types.js";
+import { estimateTokens as defaultEstimateTokens } from "./token-estimator.js";
+import { getModelContextSize } from "./model-context.js";
+import { compactMessages } from "./compact.js";
 
 /**
  * Creates a Vercel AI SDK middleware that automatically compacts conversation
  * context when token usage exceeds a threshold of the model's context window.
  */
 export function compactMiddleware(
-  options: CompactMiddlewareOptions = {},
+  options: CompactMiddlewareOptions = {}
 ): LanguageModelV3Middleware {
   const {
     maxTokens: configuredMaxTokens,
@@ -22,21 +22,25 @@ export function compactMiddleware(
   } = options;
 
   return {
-    specificationVersion: 'v3',
+    specificationVersion: "v3",
 
     transformParams: async ({ params, model }) => {
       const messages = params.prompt;
 
       // Resolve max tokens: explicit config > model lookup
-      const maxTokens =
-        configuredMaxTokens ?? getModelContextSize(model.modelId);
+      const maxTokens = configuredMaxTokens ?? getModelContextSize(model.modelId);
 
       if (maxTokens == null) {
-        // Can't determine context size — pass through without compaction
-        return params;
+        console.warn(
+          '[aisdk-compact] Could not auto-resolve context window for model "' +
+            model.modelId +
+            '". Defaulting to 60,000 tokens. Pass maxTokens to set the value explicitly.'
+        );
       }
 
-      const tokenLimit = Math.floor(maxTokens * threshold);
+      const effectiveMaxTokens = maxTokens ?? 60_000;
+
+      const tokenLimit = Math.floor(effectiveMaxTokens * threshold);
       const currentTokens = estimateTokens(messages);
 
       if (currentTokens <= tokenLimit) {
@@ -54,11 +58,10 @@ export function compactMiddleware(
       if (onCompaction) {
         const compactedTokens = estimateTokens(compactedPrompt);
         // Count non-system messages that were in older portion
-        const systemCount = messages.filter((m) => m.role === 'system').length;
+        const systemCount = messages.filter((m) => m.role === "system").length;
         const originalConvCount = messages.length - systemCount;
         const compactedConvCount =
-          compactedPrompt.length -
-          compactedPrompt.filter((m) => m.role === 'system').length;
+          compactedPrompt.length - compactedPrompt.filter((m) => m.role === "system").length;
         const removedMessageCount = originalConvCount - compactedConvCount;
 
         onCompaction({

@@ -2,8 +2,8 @@ import type {
   LanguageModelV3,
   LanguageModelV3Message,
   LanguageModelV3Prompt,
-} from '@ai-sdk/provider';
-import { defaultCompactionPrompt } from './prompt.js';
+} from "@ai-sdk/provider";
+import { defaultCompactionPrompt } from "./prompt.js";
 
 /**
  * Serialize messages into a text representation for the compaction prompt.
@@ -12,44 +12,44 @@ function serializeMessages(messages: LanguageModelV3Message[]): string {
   return messages
     .map((msg) => {
       switch (msg.role) {
-        case 'system':
+        case "system":
           return `[system]: ${msg.content}`;
-        case 'user':
-        case 'assistant': {
+        case "user":
+        case "assistant": {
           const text = msg.content
             .map((part) => {
               switch (part.type) {
-                case 'text':
+                case "text":
                   return part.text;
-                case 'reasoning':
+                case "reasoning":
                   return `[reasoning]: ${part.text}`;
-                case 'tool-call':
+                case "tool-call":
                   return `[tool-call: ${part.toolName}(${JSON.stringify(part.input)})]`;
-                case 'tool-result':
+                case "tool-result":
                   return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
                 default:
                   return `[${part.type}]`;
               }
             })
-            .join('\n');
+            .join("\n");
           return `[${msg.role}]: ${text}`;
         }
-        case 'tool': {
+        case "tool": {
           const text = msg.content
             .map((part) => {
               switch (part.type) {
-                case 'tool-result':
+                case "tool-result":
                   return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
                 default:
                   return `[${part.type}]`;
               }
             })
-            .join('\n');
+            .join("\n");
           return `[tool]: ${text}`;
         }
       }
     })
-    .join('\n\n');
+    .join("\n\n");
 }
 
 export interface CompactMessagesOptions {
@@ -65,7 +65,7 @@ export interface CompactMessagesOptions {
 export async function compactMessages(
   model: LanguageModelV3,
   prompt: LanguageModelV3Prompt,
-  options: CompactMessagesOptions,
+  options: CompactMessagesOptions
 ): Promise<LanguageModelV3Prompt> {
   const { recentMessageCount, compactionPrompt } = options;
 
@@ -74,7 +74,7 @@ export async function compactMessages(
   const conversationMessages: LanguageModelV3Message[] = [];
 
   for (const msg of prompt) {
-    if (msg.role === 'system') {
+    if (msg.role === "system") {
       systemMessages.push(msg);
     } else {
       conversationMessages.push(msg);
@@ -88,10 +88,10 @@ export async function compactMessages(
 
   const olderMessages = conversationMessages.slice(
     0,
-    conversationMessages.length - recentMessageCount,
+    conversationMessages.length - recentMessageCount
   );
   const recentMessages = conversationMessages.slice(
-    conversationMessages.length - recentMessageCount,
+    conversationMessages.length - recentMessageCount
   );
 
   // Serialize older messages for the summarization prompt
@@ -102,12 +102,12 @@ export async function compactMessages(
   // Call the model to generate a summary
   const result = await model.doGenerate({
     prompt: [
-      { role: 'system', content: summaryPrompt },
+      { role: "system", content: summaryPrompt },
       {
-        role: 'user',
+        role: "user",
         content: [
           {
-            type: 'text',
+            type: "text",
             text: `Here is the conversation history to compact:\n\n${serialized}`,
           },
         ],
@@ -117,16 +117,16 @@ export async function compactMessages(
 
   // Extract summary text from the response
   const summaryText = result.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .filter((c): c is { type: "text"; text: string } => c.type === "text")
     .map((c) => c.text)
-    .join('');
+    .join("");
 
   // Build the compacted prompt
   const summaryMessage: LanguageModelV3Message = {
-    role: 'assistant',
+    role: "assistant",
     content: [
       {
-        type: 'text',
+        type: "text",
         text: `[Compacted conversation summary]\n\n${summaryText}`,
       },
     ],
