@@ -1,16 +1,23 @@
-export const defaultCompactionPrompt = `You are a conversation compactor. Your job is to condense a conversation history into a concise but comprehensive summary.
-
-Preserve the following in your summary:
-- Key decisions and agreements made
-- Important facts, names, identifiers, and technical details
-- Current state of any ongoing tasks or code changes
-- Relevant code snippets, file paths, and error messages
-- Any unresolved questions or pending items
-- The user's goals and constraints
-
-Do NOT include:
-- Conversational filler or pleasantries
-- Redundant or superseded information
-- Step-by-step reasoning that led to final conclusions (just keep the conclusions)
-
-Format the summary as a structured, concise narrative. Use bullet points for lists of facts. The summary will replace the original messages, so ensure no critical context is lost.`;
+export const defaultCompactionPrompt = `You have been working on the task described above but have not yet completed it. Write a continuation summary that will allow you (or another instance of yourself) to resume work efficiently in a future context window where the conversation history will be replaced with this summary. Your summary should be structured, concise, and actionable. Include:
+1. Task Overview
+The user's core request and success criteria
+Any clarifications or constraints they specified
+2. Current State
+What has been completed so far
+Files created, modified, or analyzed (with paths if relevant)
+Key outputs or artifacts produced
+3. Important Discoveries
+Technical constraints or requirements uncovered
+Decisions made and their rationale
+Errors encountered and how they were resolved
+What approaches were tried that didn't work (and why)
+4. Next Steps
+Specific actions needed to complete the task
+Any blockers or open questions to resolve
+Priority order if multiple steps remain
+5. Context to Preserve
+User preferences or style requirements
+Domain-specific details that aren't obvious
+Any promises made to the user
+Be concise but complete—err on the side of including information that would prevent duplicate work or repeated mistakes. Write in a way that enables immediate resumption of the task.
+Wrap your summary in <summary></summary> tags.`;

@@ -99,7 +99,7 @@ describe("compactMessages", () => {
     expect(result[2].role).toBe("assistant"); // summary
   });
 
-  it("calls the model with serialized older messages", async () => {
+  it("calls the model with older messages as real message objects", async () => {
     const model = makeMockModel("summary");
     const spy = vi.spyOn(model, "doGenerate");
 
@@ -109,14 +109,27 @@ describe("compactMessages", () => {
 
     expect(spy).toHaveBeenCalledOnce();
     const callArgs = spy.mock.calls[0][0];
-    // The compaction prompt should be sent as a user message
-    const userMsg = callArgs.prompt.find((m) => m.role === "user");
-    expect(userMsg).toBeDefined();
-    if (userMsg && userMsg.role === "user") {
-      const text = userMsg.content[0];
+    const sentPrompt = callArgs.prompt;
+
+    // First message should be the system message from the conversation
+    expect(sentPrompt[0].role).toBe("system");
+    expect(sentPrompt[0].content).toBe("You are a helpful assistant.");
+
+    // Older messages (8 of them) should be real message objects, not serialized text
+    const olderMessages = sentPrompt.slice(1, -1);
+    expect(olderMessages).toHaveLength(8);
+    expect(olderMessages[0].role).toBe("user");
+    if (olderMessages[0].role === "user") {
+      expect(olderMessages[0].content[0].type).toBe("text");
+    }
+
+    // Last message should be the compaction instruction as a user message
+    const lastMsg = sentPrompt[sentPrompt.length - 1];
+    expect(lastMsg.role).toBe("user");
+    if (lastMsg.role === "user") {
+      const text = lastMsg.content[0];
       if (text.type === "text") {
-        expect(text.text).toContain("tired of sitting by her sister");
-        expect(text.text).toContain("conversation history to compact");
+        expect(text.text).toContain("Write a continuation summary");
       }
     }
   });
@@ -179,10 +192,14 @@ describe("compactMessages", () => {
     });
 
     const callArgs = spy.mock.calls[0][0];
-    const systemMsg = callArgs.prompt.find((m) => m.role === "system");
-    expect(systemMsg).toBeDefined();
-    if (systemMsg && systemMsg.role === "system") {
-      expect(systemMsg.content).toBe(customPrompt);
+    // Custom prompt should appear in the final user message, not as a system message
+    const lastMsg = callArgs.prompt[callArgs.prompt.length - 1];
+    expect(lastMsg.role).toBe("user");
+    if (lastMsg.role === "user") {
+      const text = lastMsg.content[0];
+      if (text.type === "text") {
+        expect(text.text).toContain(customPrompt);
+      }
     }
   });
 });

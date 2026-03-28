@@ -5,53 +5,6 @@ import type {
 } from "@ai-sdk/provider";
 import { defaultCompactionPrompt } from "./prompt.js";
 
-/**
- * Serialize messages into a text representation for the compaction prompt.
- */
-function serializeMessages(messages: LanguageModelV3Message[]): string {
-  return messages
-    .map((msg) => {
-      switch (msg.role) {
-        case "system":
-          return `[system]: ${msg.content}`;
-        case "user":
-        case "assistant": {
-          const text = msg.content
-            .map((part) => {
-              switch (part.type) {
-                case "text":
-                  return part.text;
-                case "reasoning":
-                  return `[reasoning]: ${part.text}`;
-                case "tool-call":
-                  return `[tool-call: ${part.toolName}(${JSON.stringify(part.input)})]`;
-                case "tool-result":
-                  return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
-                default:
-                  return `[${part.type}]`;
-              }
-            })
-            .join("\n");
-          return `[${msg.role}]: ${text}`;
-        }
-        case "tool": {
-          const text = msg.content
-            .map((part) => {
-              switch (part.type) {
-                case "tool-result":
-                  return `[tool-result: ${part.toolName} -> ${JSON.stringify(part.output)}]`;
-                default:
-                  return `[${part.type}]`;
-              }
-            })
-            .join("\n");
-          return `[tool]: ${text}`;
-        }
-      }
-    })
-    .join("\n\n");
-}
-
 export interface CompactMessagesOptions {
   recentMessageCount: number;
   compactionPrompt?: string;
@@ -96,9 +49,6 @@ export async function compactMessages(
   const olderMessages = conversationMessages.slice(0, excessMessagesCount);
   const recentMessages = conversationMessages.slice(excessMessagesCount);
 
-  // Serialize older messages for the summarization prompt
-  const serialized = serializeMessages(olderMessages);
-
   const summaryPrompt = compactionPrompt ?? defaultCompactionPrompt;
 
   if (debug) {
@@ -107,16 +57,17 @@ export async function compactMessages(
     );
   }
 
-  // Call the model to generate a summary
+  // Call the model with real message objects + compaction instruction as a final user message
   const result = await model.doGenerate({
     prompt: [
-      { role: "system", content: summaryPrompt },
+      ...systemMessages,
+      ...olderMessages,
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: `Here is the conversation history to compact:\n\n${serialized}`,
+            text: summaryPrompt,
           },
         ],
       },
@@ -163,8 +114,6 @@ export async function compactMessages(
       },
     ],
   };
-
-  console.log([...systemMessages, summaryMessage, ...recentMessages]);
 
   return [...systemMessages, summaryMessage, ...recentMessages];
 }

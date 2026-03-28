@@ -79,7 +79,6 @@ async function runLongConversation() {
   const model = wrapLanguageModel({
     model: gateway("openai/gpt-4.1-nano"),
     middleware: [
-      devToolsMiddleware(),
       compactMiddleware({
         maxTokens: 2_000,
         threshold: 0.5,
@@ -90,6 +89,7 @@ async function runLongConversation() {
           console.log("[compaction]", info);
         },
       }),
+      devToolsMiddleware(),
     ],
   });
 

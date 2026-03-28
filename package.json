@@ -1,6 +1,6 @@
 {
   "name": "aisdk-compact",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Context compaction middleware for the Vercel AI SDK",
   "type": "module",
   "main": "./dist/index.cjs",

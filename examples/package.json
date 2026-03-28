@@ -5,6 +5,7 @@
   "scripts": {
     "server": "bun run streaming-server.ts",
     "raw": "bun run raw-runs.ts",
+    "compare": "bun run compare-tokens.ts",
     "devtools": "npx @ai-sdk/devtools"
   },
   "dependencies": {

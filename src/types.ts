@@ -27,7 +27,8 @@ export interface CompactMiddlewareOptions {
   compactionModel?: LanguageModelV3;
 
   /**
-   * Custom system prompt for the summarization call.
+   * Custom instruction for the summarization call.
+   * Sent as a user message after the older messages.
    * If provided, replaces the default compaction prompt entirely.
    */
   compactionPrompt?: string;
