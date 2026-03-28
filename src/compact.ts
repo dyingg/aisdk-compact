@@ -55,6 +55,7 @@ function serializeMessages(messages: LanguageModelV3Message[]): string {
 export interface CompactMessagesOptions {
   recentMessageCount: number;
   compactionPrompt?: string;
+  debug?: boolean;
 }
 
 /**
@@ -67,7 +68,7 @@ export async function compactMessages(
   prompt: LanguageModelV3Prompt,
   options: CompactMessagesOptions
 ): Promise<LanguageModelV3Prompt> {
-  const { recentMessageCount, compactionPrompt } = options;
+  const { recentMessageCount, compactionPrompt, debug = false } = options;
 
   // Separate system messages from the rest
   const systemMessages: LanguageModelV3Message[] = [];
@@ -83,6 +84,11 @@ export async function compactMessages(
 
   // If not enough messages to split, return as-is
   if (conversationMessages.length <= recentMessageCount) {
+    if (debug) {
+      console.debug(
+        `[aisdk-compact] Skipping: only ${conversationMessages.length} conversation messages, need >${recentMessageCount} to split`
+      );
+    }
     return prompt;
   }
 
@@ -94,6 +100,12 @@ export async function compactMessages(
   const serialized = serializeMessages(olderMessages);
 
   const summaryPrompt = compactionPrompt ?? defaultCompactionPrompt;
+
+  if (debug) {
+    console.debug(
+      `[aisdk-compact] Summarizing ${olderMessages.length} older messages (keeping ${recentMessages.length} recent)`
+    );
+  }
 
   // Call the model to generate a summary
   const result = await model.doGenerate({
@@ -109,6 +121,16 @@ export async function compactMessages(
         ],
       },
     ],
+    providerOptions: {
+      "aisdk-compact": {
+        purpose: "summarization",
+        olderMessageCount: olderMessages.length,
+        recentMessageCount: recentMessages.length,
+      },
+    },
+    headers: {
+      "X-Aisdk-Compact-Purpose": "summarization",
+    },
   });
 
   // Extract summary text from the response
@@ -117,16 +139,32 @@ export async function compactMessages(
     .map((c) => c.text)
     .join("");
 
+  if (debug) {
+    console.debug(`[aisdk-compact] Summary generated (${summaryText.length} chars)`);
+    console.debug(
+      `[aisdk-compact] Summary: ${summaryText.slice(0, 500)}${summaryText.length > 500 ? "..." : ""}`
+    );
+  }
+  const originalMessages = conversationMessages.length;
+  // One synthetic assistant summary + preserved recent conversation messages
+  const messagesAfterCompaction = 1 + recentMessages.length;
+
   // Build the compacted prompt
   const summaryMessage: LanguageModelV3Message = {
     role: "assistant",
     content: [
       {
         type: "text",
-        text: `[Compacted conversation summary]\n\n${summaryText}`,
+        text:
+          `[Compacted conversation summary]\n\n` +
+          `originalMessages: ${originalMessages}\n` +
+          `messagesAfterCompaction: ${messagesAfterCompaction}\n\n` +
+          summaryText,
       },
     ],
   };
+
+  console.log([...systemMessages, summaryMessage, ...recentMessages]);
 
   return [...systemMessages, summaryMessage, ...recentMessages];
 }

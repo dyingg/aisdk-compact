@@ -43,6 +43,13 @@ export interface CompactMiddlewareOptions {
    * Callback fired after compaction occurs.
    */
   onCompaction?: (info: CompactionInfo) => void;
+
+  /**
+   * Enable verbose debug logging of the compaction flow.
+   * Logs are prefixed with [aisdk-compact] and sent to console.debug.
+   * @default false
+   */
+  debug?: boolean;
 }
 
 export interface CompactionInfo {

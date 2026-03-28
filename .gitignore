@@ -2,3 +2,5 @@ node_modules/
 dist/
 bun.lock
 *.tsbuildinfo
+examples/.env
+.devtools

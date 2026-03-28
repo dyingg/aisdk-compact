@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { LanguageModelV3GenerateResult } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { compactMiddleware } from "../src/middleware.js";
+import { ALICE_PARAGRAPHS } from "./fixtures.js";
 
 function makeMockModel(modelId: string, summaryText = "Compacted summary.") {
   return new MockLanguageModelV3({
@@ -20,11 +21,13 @@ function makeLargePrompt(messageCount: number) {
   for (let i = 0; i < messageCount; i++) {
     msgs.push({
       role: "user" as const,
-      content: [{ type: "text" as const, text: `Message ${i}: ${"x".repeat(500)}` }],
+      content: [{ type: "text" as const, text: ALICE_PARAGRAPHS[i % ALICE_PARAGRAPHS.length] }],
     } as any);
     msgs.push({
       role: "assistant" as const,
-      content: [{ type: "text" as const, text: `Response ${i}: ${"y".repeat(500)}` }],
+      content: [
+        { type: "text" as const, text: ALICE_PARAGRAPHS[(i + 5) % ALICE_PARAGRAPHS.length] },
+      ],
     } as any);
   }
   return msgs;
@@ -57,6 +60,36 @@ describe("compactMiddleware", () => {
     expect(result.prompt).toEqual(params.prompt);
   });
 
+  it("does not call onCompaction when compactMessages returns unchanged (not enough messages)", async () => {
+    const model = makeMockModel("gpt-4o");
+    const onCompaction = vi.fn();
+
+    const middleware = compactMiddleware({
+      maxTokens: 100,
+      threshold: 0.1,
+      recentMessageCount: 6,
+      onCompaction,
+    });
+
+    const longText = ALICE_PARAGRAPHS.join("\n\n").repeat(3);
+    const prompt = [
+      { role: "system" as const, content: "You are helpful." },
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: longText }],
+      },
+    ];
+
+    const result = await middleware.transformParams!({
+      type: "generate",
+      params: { prompt } as any,
+      model,
+    });
+
+    expect(result.prompt).toBe(prompt);
+    expect(onCompaction).not.toHaveBeenCalled();
+  });
+
   it("compacts when over threshold", async () => {
     const model = makeMockModel("gpt-4o");
     const onCompaction = vi.fn();
@@ -80,6 +113,17 @@ describe("compactMiddleware", () => {
     expect(result.prompt.length).toBe(4);
     expect(onCompaction).toHaveBeenCalledOnce();
     expect(onCompaction.mock.calls[0][0].removedMessageCount).toBeGreaterThan(0);
+
+    const summaryMsg = result.prompt[1];
+    expect(summaryMsg.role).toBe("assistant");
+    if (summaryMsg.role === "assistant") {
+      const part = summaryMsg.content[0];
+      expect(part?.type).toBe("text");
+      if (part?.type === "text") {
+        expect(part.text).toContain("originalMessages:");
+        expect(part.text).toContain("messagesAfterCompaction:");
+      }
+    }
   });
 
   it("auto-resolves maxTokens from model ID", async () => {
@@ -147,6 +191,90 @@ describe("compactMiddleware", () => {
 
     // compactionModel should have been called, not the wrapped model
     expect(compactionSpy).toHaveBeenCalledOnce();
+  });
+
+  it("logs debug output when debug is true and compaction triggers", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const model = makeMockModel("gpt-4o");
+
+    const middleware = compactMiddleware({
+      maxTokens: 1000,
+      threshold: 0.1,
+      recentMessageCount: 2,
+      debug: true,
+    });
+
+    const prompt = makeLargePrompt(10);
+
+    await middleware.transformParams!({
+      type: "generate",
+      params: { prompt } as any,
+      model,
+    });
+
+    const calls = debugSpy.mock.calls.map((c) => c[0]);
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Middleware initialized"))).toBe(
+      true
+    );
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Token estimate:"))).toBe(true);
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Over threshold"))).toBe(true);
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Compaction complete:"))).toBe(
+      true
+    );
+    debugSpy.mockRestore();
+  });
+
+  it("does not log debug output when debug is false", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const model = makeMockModel("gpt-4o");
+
+    const middleware = compactMiddleware({
+      maxTokens: 1000,
+      threshold: 0.1,
+      recentMessageCount: 2,
+    });
+
+    const prompt = makeLargePrompt(10);
+
+    await middleware.transformParams!({
+      type: "generate",
+      params: { prompt } as any,
+      model,
+    });
+
+    expect(debugSpy).not.toHaveBeenCalled();
+    debugSpy.mockRestore();
+  });
+
+  it("logs under-threshold debug message when not compacting", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const model = makeMockModel("gpt-4o");
+
+    const middleware = compactMiddleware({
+      maxTokens: 128_000,
+      threshold: 0.8,
+      debug: true,
+    });
+
+    const params = {
+      prompt: [
+        { role: "system" as const, content: "Hi" },
+        {
+          role: "user" as const,
+          content: [{ type: "text" as const, text: "Hello" }],
+        },
+      ],
+    };
+
+    await middleware.transformParams!({
+      type: "generate",
+      params: params as any,
+      model,
+    });
+
+    const calls = debugSpy.mock.calls.map((c) => c[0]);
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Under threshold"))).toBe(true);
+    debugSpy.mockRestore();
   });
 
   it("uses custom estimateTokens function", async () => {

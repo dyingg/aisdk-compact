@@ -19,12 +19,25 @@ export function compactMiddleware(
     compactionPrompt,
     estimateTokens = defaultEstimateTokens,
     onCompaction,
+    debug = false,
   } = options;
 
   if (!compactionModel) {
     console.warn(
       "[aisdk-compact] No compactionModel provided. The base model will be used for compaction. " +
         "Consider using a cheaper/smaller model (e.g. gpt-4o-mini, claude-haiku) to reduce costs."
+    );
+  }
+
+  if (debug) {
+    console.debug(
+      "[aisdk-compact] Middleware initialized",
+      JSON.stringify({
+        maxTokens: configuredMaxTokens ?? "auto",
+        threshold,
+        recentMessageCount,
+        compactionModel: compactionModel ? "custom" : "base model",
+      })
     );
   }
 
@@ -50,8 +63,23 @@ export function compactMiddleware(
       const tokenLimit = Math.floor(effectiveMaxTokens * threshold);
       const currentTokens = estimateTokens(messages);
 
+      if (debug) {
+        console.debug(
+          `[aisdk-compact] Token estimate: ${currentTokens}/${effectiveMaxTokens} (threshold: ${tokenLimit}, ${((currentTokens / effectiveMaxTokens) * 100).toFixed(1)}% used)`
+        );
+      }
+
       if (currentTokens <= tokenLimit) {
+        if (debug) {
+          console.debug(
+            `[aisdk-compact] Under threshold, passing through (${messages.length} messages)`
+          );
+        }
         return params;
+      }
+
+      if (debug) {
+        console.debug("[aisdk-compact] Over threshold, triggering compaction...");
       }
 
       // Use the provided compaction model, or fall back to the wrapped model
@@ -60,9 +88,10 @@ export function compactMiddleware(
       const compactedPrompt = await compactMessages(summaryModel, messages, {
         recentMessageCount,
         compactionPrompt,
+        debug,
       });
 
-      if (onCompaction) {
+      if (onCompaction && compactedPrompt !== messages) {
         const compactedTokens = estimateTokens(compactedPrompt);
         // Count non-system messages that were in older portion
         const systemCount = messages.filter((m) => m.role === "system").length;
@@ -77,6 +106,15 @@ export function compactMiddleware(
           removedMessageCount,
         });
       }
+
+      if (debug && compactedPrompt !== messages) {
+        const compactedTokens = estimateTokens(compactedPrompt);
+        console.debug(
+          `[aisdk-compact] Compaction complete: ${messages.length} -> ${compactedPrompt.length} messages, ${currentTokens} -> ${compactedTokens} tokens`
+        );
+      }
+
+      console.log("compactedPrompt", compactedPrompt);
 
       return { ...params, prompt: compactedPrompt };
     },

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { LanguageModelV3Prompt, LanguageModelV3GenerateResult } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { compactMessages } from "../src/compact.js";
+import { ALICE_SENTENCES, ALICE_RESPONSES } from "./fixtures.js";
 
 function makeMockModel(summaryText: string) {
   return new MockLanguageModelV3({
@@ -19,11 +20,11 @@ function makeMessages(count: number): LanguageModelV3Prompt {
   for (let i = 0; i < count; i++) {
     msgs.push({
       role: "user",
-      content: [{ type: "text", text: `User message ${i}` }],
+      content: [{ type: "text", text: ALICE_SENTENCES[i % ALICE_SENTENCES.length] }],
     });
     msgs.push({
       role: "assistant",
-      content: [{ type: "text", text: `Assistant response ${i}` }],
+      content: [{ type: "text", text: ALICE_RESPONSES[i % ALICE_RESPONSES.length] }],
     });
   }
   return msgs;
@@ -60,6 +61,8 @@ describe("compactMessages", () => {
       expect(textPart.type).toBe("text");
       if (textPart.type === "text") {
         expect(textPart.text).toContain("Compacted conversation summary");
+        expect(textPart.text).toContain("originalMessages: 20");
+        expect(textPart.text).toContain("messagesAfterCompaction: 5");
         expect(textPart.text).toContain("This is the summary of older messages.");
       }
     }
@@ -112,10 +115,55 @@ describe("compactMessages", () => {
     if (userMsg && userMsg.role === "user") {
       const text = userMsg.content[0];
       if (text.type === "text") {
-        expect(text.text).toContain("User message 0");
+        expect(text.text).toContain("tired of sitting by her sister");
         expect(text.text).toContain("conversation history to compact");
       }
     }
+  });
+
+  it("passes aisdk-compact providerOptions to doGenerate for trace identification", async () => {
+    const model = makeMockModel("summary");
+    const spy = vi.spyOn(model, "doGenerate");
+
+    const prompt = makeMessages(5);
+
+    await compactMessages(model, prompt, { recentMessageCount: 2 });
+
+    const callArgs = spy.mock.calls[0][0];
+    expect(callArgs.providerOptions).toEqual({
+      "aisdk-compact": {
+        purpose: "summarization",
+        olderMessageCount: 8,
+        recentMessageCount: 2,
+      },
+    });
+    expect(callArgs.headers).toEqual({
+      "X-Aisdk-Compact-Purpose": "summarization",
+    });
+  });
+
+  it("does not produce bare console.log calls during compaction", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const model = makeMockModel("summary");
+    const prompt = makeMessages(5);
+
+    await compactMessages(model, prompt, { recentMessageCount: 2 });
+
+    expect(logSpy).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+  });
+
+  it("logs debug output when debug is true", async () => {
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const model = makeMockModel("summary");
+    const prompt = makeMessages(5);
+
+    await compactMessages(model, prompt, { recentMessageCount: 2, debug: true });
+
+    const calls = debugSpy.mock.calls.map((c) => c[0]);
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Summarizing"))).toBe(true);
+    expect(calls.some((c: string) => c.includes("[aisdk-compact] Summary generated"))).toBe(true);
+    debugSpy.mockRestore();
   });
 
   it("uses custom compaction prompt when provided", async () => {

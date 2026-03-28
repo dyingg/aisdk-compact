@@ -1,20 +1,25 @@
 import { Hono } from "hono";
-import { streamText, wrapLanguageModel, gateway, type ModelMessage } from "ai";
-import { compactMiddleware } from "aisdk-compact";
+import { streamText, wrapLanguageModel, gateway } from "ai";
+import type { ModelMessage } from "ai";
+import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { compactMiddleware } from "../src/index.js";
 
 const app = new Hono();
 
 const model = wrapLanguageModel({
-  model: gateway("anthropic/claude-sonnet-4"),
-  middleware: compactMiddleware({
-    threshold: 0.8,
-    recentMessageCount: 6,
-    onCompaction: ({ originalTokens, compactedTokens, removedMessageCount }) => {
-      console.log(
-        `[compaction] ${removedMessageCount} messages removed | ${originalTokens} -> ${compactedTokens} tokens`
-      );
-    },
-  }),
+  model: gateway("openai/gpt-4.1-nano"),
+  middleware: [
+    devToolsMiddleware(),
+    compactMiddleware({
+      threshold: 0.8,
+      recentMessageCount: 6,
+      onCompaction: ({ originalTokens, compactedTokens, removedMessageCount }) => {
+        console.log(
+          `[compaction] ${removedMessageCount} messages removed | ${originalTokens} -> ${compactedTokens} tokens`
+        );
+      },
+    }),
+  ],
 });
 
 /**
@@ -28,7 +33,7 @@ const model = wrapLanguageModel({
 app.post("/chat", async (c) => {
   const { messages } = await c.req.json<{ messages: ModelMessage[] }>();
 
-  const result = streamText({
+  const result = await streamText({
     model,
     system: "You are a helpful assistant. Keep responses concise.",
     messages,

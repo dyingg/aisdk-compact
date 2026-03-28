@@ -1,5 +1,8 @@
-import { generateText, wrapLanguageModel, gateway, type ModelMessage } from "ai";
-import { compactMiddleware } from "aisdk-compact";
+import { generateText, wrapLanguageModel, gateway } from "ai";
+import type { ModelMessage } from "ai";
+import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { compactMiddleware } from "../src/index.js";
+import { ALICE_SENTENCES, ALICE_RESPONSES } from "../test/fixtures.js";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -14,15 +17,18 @@ function buildConversation(turns: number): ModelMessage[] {
   for (let i = 0; i < turns; i++) {
     messages.push({
       role: "user",
-      content: `This is user message #${i + 1}. ` + "x".repeat(200),
+      content: ALICE_SENTENCES[i % ALICE_SENTENCES.length],
     });
     messages.push({
       role: "assistant",
-      content: `This is assistant response #${i + 1}. ` + "y".repeat(200),
+      content: ALICE_RESPONSES[i % ALICE_RESPONSES.length],
     });
   }
   // End with a user message so the model has something to reply to
-  messages.push({ role: "user", content: "Summarize our conversation so far." });
+  messages.push({
+    role: "user",
+    content: "Count the number of tokens, and words in the conversation so far.",
+  });
   return messages;
 }
 
@@ -34,14 +40,17 @@ async function runShortConversation() {
   let compacted = false;
 
   const model = wrapLanguageModel({
-    model: gateway("anthropic/claude-sonnet-4"),
-    middleware: compactMiddleware({
-      threshold: 0.8,
-      onCompaction: (info) => {
-        compacted = true;
-        console.log("[compaction]", info);
-      },
-    }),
+    model: gateway("openai/gpt-4.1-nano"),
+    middleware: [
+      devToolsMiddleware(),
+      compactMiddleware({
+        threshold: 0.8,
+        onCompaction: (info) => {
+          compacted = true;
+          console.log("[compaction]", info);
+        },
+      }),
+    ],
   });
 
   const messages = buildConversation(3); // 7 messages total — well under threshold
@@ -54,7 +63,9 @@ async function runShortConversation() {
   });
 
   console.log(`Compaction triggered: ${compacted}`);
-  console.log(`Usage: ${usage.inputTokens ?? "?"} input / ${usage.outputTokens ?? "?"} output tokens`);
+  console.log(
+    `Usage: ${usage.inputTokens ?? "?"} input / ${usage.outputTokens ?? "?"} output tokens`
+  );
   console.log(`Response:\n${text.slice(0, 300)}${text.length > 300 ? "..." : ""}`);
 }
 
@@ -66,20 +77,23 @@ async function runLongConversation() {
   let compacted = false;
 
   const model = wrapLanguageModel({
-    model: gateway("anthropic/claude-sonnet-4"),
-    middleware: compactMiddleware({
-      // Use a tiny maxTokens to force compaction with fewer messages
-      maxTokens: 2_000,
-      threshold: 0.5,
-      recentMessageCount: 4,
-      onCompaction: (info) => {
-        compacted = true;
-        console.log("[compaction]", info);
-      },
-    }),
+    model: gateway("openai/gpt-4.1-nano"),
+    middleware: [
+      devToolsMiddleware(),
+      compactMiddleware({
+        maxTokens: 2_000,
+        threshold: 0.5,
+        recentMessageCount: 4,
+        debug: true,
+        onCompaction: (info) => {
+          compacted = true;
+          console.log("[compaction]", info);
+        },
+      }),
+    ],
   });
 
-  const messages = buildConversation(20); // 41 messages — will exceed 2k * 0.5 = 1k token limit
+  const messages = buildConversation(30); // 61 messages — will exceed 2k * 0.5 = 1k token limit
   console.log(`Sending ${messages.length} messages...`);
 
   const { text, usage } = await generateText({
@@ -87,16 +101,12 @@ async function runLongConversation() {
     system: "You are a helpful assistant.",
     messages,
   });
-
-  console.log(`Compaction triggered: ${compacted}`);
-  console.log(`Usage: ${usage.inputTokens ?? "?"} input / ${usage.outputTokens ?? "?"} output tokens`);
-  console.log(`Response:\n${text.slice(0, 300)}${text.length > 300 ? "..." : ""}`);
 }
 
 // ─── run ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  await runShortConversation();
+  // await runShortConversation();
   await runLongConversation();
 }
 
